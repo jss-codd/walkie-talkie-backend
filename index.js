@@ -9,7 +9,7 @@ const bodyParser = require("body-parser");
 const multer = require("multer");
 const fs = require("fs");
 
-const {Devices} = require("./utils/db/model");
+const { Devices, Locations } = require("./utils/db/model");
 const {SERVER_URL} = require("./utils/Constants");
 
 const admin = require("firebase-admin");
@@ -28,7 +28,7 @@ admin.initializeApp({
 const fileStatic = 'https://onlinetestcase.com/wp-content/uploads/2023/06/100-KB-MP3.mp3';
 
 app.get('/', (req, res) => { 
-    res.sendFile(__dirname + '/index.html'); 
+    res.send('ok'); 
 });
 
 app.use('/resources',express.static(__dirname + '/myuploads'));
@@ -133,6 +133,22 @@ app.post("/device-token", async (req, res) => {
     return res.json({ success: true, token });
   } catch(err){
     return res.statusCode(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/save-location", async (req, res) => {
+  try{
+    const token = req.body.token || "";
+    const latitude = req.body.latitude || "";
+    const longitude = req.body.longitude || "";
+
+    if(token && latitude && longitude) {
+      const device = await Locations.create( { "token": token, "lat": latitude, "lng": longitude } );
+    }
+
+    return res.json({ success: true });
+  } catch(err){
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
