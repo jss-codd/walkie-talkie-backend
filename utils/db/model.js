@@ -17,6 +17,10 @@ const Devices = sequelize.define(
     status: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
+    },
+    play_audio: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
     }
   }
 );

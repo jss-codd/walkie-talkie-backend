@@ -152,12 +152,32 @@ app.post("/save-location", async (req, res) => {
   }
 });
 
-app.put("/notification-status", async (req, res) => {
+app.put("/audio-play-status", async (req, res) => {
   try{
     const token = req.body.token || "";
     const status = req.body.status;
 
-    console.log('token', token);
+    if(token) {
+      const res = await Devices.update(
+        { play_audio: status },
+        {
+          where: {
+            token: token,
+          },
+        },
+      );
+    }
+
+    return res.json({ success: true, status });
+  } catch(err){
+    return res.statusCode(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put("/notification-status", async (req, res) => {
+  try{
+    const token = req.body.token || "";
+    const status = req.body.status;
 
     if(token) {
       const res = await Devices.update(
@@ -176,18 +196,20 @@ app.put("/notification-status", async (req, res) => {
   }
 });
 
-app.post("/notification-status", async (req, res) => {
+app.post("/fetch-settings", async (req, res) => {
   try{
     const token = req.body.token || "";
     let status = true;
+    let play_audio = true;
 
     if(token) {
       const tokenRes = await Devices.findOne({ where: { token: token } }, { raw: true });
       if(tokenRes)
         status = tokenRes.status;
+        play_audio = tokenRes.play_audio;
     }
 
-    return res.json({ success: true, status: status });
+    return res.json({ success: true, status: status, play_audio });
   } catch(err){
     return res.statusCode(500).json({ success: false, error: err.message });
   }
