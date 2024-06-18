@@ -9,6 +9,7 @@ const fs = require("fs");
 const admin = require("firebase-admin");
 
 const { getDeviceTokens } = require('./utils/Device');
+const { getLocationInRadius } = require('./utils/Location');
 const { Devices, Locations } = require("./utils/db/model");
 const {SERVER_URL} = require("./utils/Constants");
 const logger = require("./logger");
@@ -66,15 +67,21 @@ app.post("/upload", uploadFiles.single("file"), async (req, res, next) => {
 
     const bodyParse = JSON.parse(JSON.stringify(req.body));
     const token = bodyParse?.token || "";
+    const location = JSON.parse(bodyParse?.location) || {};
+
+    if(!location?.latitude || !location?.longitude) {
+      throw new Error("Failed to send! Can't measure current location.");
+    }
   
-    //send to devices in push notification
-    //first get all device tokens
-    const tokens = await getDeviceTokens();
+    // send to devices in push notification
+    // first get all device tokens according to radius
+    // const tokens = await getDeviceTokens();
+    const tokens = await getLocationInRadius(location.latitude, location.longitude);
     
     const tokensArray = tokens.filter((d) => d.token != token).map(d => d.token);
     // const tokensArray = tokens.map(d => d.token);
 
-    console.log(tokensArray, 'tokensArray')
+    console.log(tokensArray, 'tokensArray');
 
     const batchSize = 500;
     const batches = [];
