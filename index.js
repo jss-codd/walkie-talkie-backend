@@ -1,18 +1,17 @@
 const express = require('express'); 
-const app = express(); 
-// const { Server } = require('socket.io');
+const app = express();
 const http = require('http'); 
 const server = http.createServer(app);
 var cors = require('cors');
-const { getDeviceTokens } = require('./utils/Device');
 const bodyParser = require("body-parser");
 const multer = require("multer");
 const fs = require("fs");
+const admin = require("firebase-admin");
 
+const { getDeviceTokens } = require('./utils/Device');
 const { Devices, Locations } = require("./utils/db/model");
 const {SERVER_URL} = require("./utils/Constants");
-
-const admin = require("firebase-admin");
+const logger = require("./logger");
 var serviceAccount = require("./serviceAccountKey.json");
 
 app.use(cors());
@@ -61,6 +60,7 @@ app.post("/upload", uploadFiles.single("file"), async (req, res, next) => {
     if (!file) {
       const error = new Error("Please upload a file");
       error.statusCode = 400;
+      logger.error("Please upload a file", {route: req?.originalUrl});
       return next(error);
     }
 
@@ -71,8 +71,8 @@ app.post("/upload", uploadFiles.single("file"), async (req, res, next) => {
     //first get all device tokens
     const tokens = await getDeviceTokens();
     
-    // const tokensArray = tokens.filter((d) => d.token != token).map(d => d.token);
-    const tokensArray = tokens.map(d => d.token);
+    const tokensArray = tokens.filter((d) => d.token != token).map(d => d.token);
+    // const tokensArray = tokens.map(d => d.token);
 
     console.log(tokensArray, 'tokensArray')
 
@@ -86,8 +86,8 @@ app.post("/upload", uploadFiles.single("file"), async (req, res, next) => {
     const notifications = batches.map((batch) => {
       const message = {
         data: {
-          // audio_url: `${SERVER_URL}/resources/${file.filename}`
-          audio_url: `${fileStatic}`
+          audio_url: `${SERVER_URL}/resources/${file.filename}`
+          // audio_url: `${fileStatic}`
         },
         tokens: [...batch],
         notification: {
@@ -111,7 +111,8 @@ app.post("/upload", uploadFiles.single("file"), async (req, res, next) => {
       fileName: file.filename 
     });
   } catch(error){
-    res.statusCode(500).json({
+    logger.error(error?.message, {route: req?.originalUrl});
+    res.status(500).json({
       success: false,
       error: error.message
     });
@@ -132,7 +133,8 @@ app.post("/device-token", async (req, res) => {
 
     return res.json({ success: true, token });
   } catch(err){
-    return res.statusCode(500).json({ success: false, error: err.message });
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -148,6 +150,7 @@ app.post("/save-location", async (req, res) => {
 
     return res.json({ success: true });
   } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -170,7 +173,8 @@ app.put("/audio-play-status", async (req, res) => {
 
     return res.json({ success: true, status });
   } catch(err){
-    return res.statusCode(500).json({ success: false, error: err.message });
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -192,7 +196,8 @@ app.put("/notification-status", async (req, res) => {
 
     return res.json({ success: true, status });
   } catch(err){
-    return res.statusCode(500).json({ success: false, error: err.message });
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -211,7 +216,8 @@ app.post("/fetch-settings", async (req, res) => {
 
     return res.json({ success: true, status: status, play_audio });
   } catch(err){
-    return res.statusCode(500).json({ success: false, error: err.message });
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
   
