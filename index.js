@@ -7,19 +7,26 @@ const bodyParser = require("body-parser");
 const multer = require("multer");
 const fs = require("fs");
 const admin = require("firebase-admin");
+const { QueryTypes } = require('sequelize');
 
 const { getDeviceTokens } = require('./utils/Device');
 const { getLocationInRadius } = require('./utils/Location');
-const { Devices, Locations } = require("./utils/db/model");
-const {SERVER_URL} = require("./utils/Constants");
+const { Devices, Locations, Otp, Admin, ReportedUsers } = require("./utils/db/model");
+const { SERVER_URL, errorMessage } = require("./utils/Constants");
 const logger = require("./logger");
 var serviceAccount = require("./serviceAccountKey.json");
+const {sequelize} = require('./utils/db/config');
+const { generateAccessToken, authenticateToken, generateAccessTokenForAdmin, authenticateTokenForAdmin, verifyBlockedAccount } = require('./utils/Token');
+const validateResource = require('./utils/ValidateResource');
+const validator = require('./utils/Validator');
 
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 const port = 5000;
+
+const otpRetryCount = 5;
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -32,6 +39,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/resources',express.static(__dirname + '/myuploads'));
+app.use('/profile-images',express.static(__dirname + '/profile-images'));
 
 // SET STORAGE
 const storage = multer.diskStorage({
@@ -55,44 +63,75 @@ const storage = multer.diskStorage({
   
 const uploadFiles = multer({ storage: storage });
 
-app.post("/upload", uploadFiles.single("file"), async (req, res, next) => {
+// SET STORAGE FOR PROFILE IMAGE
+const storageProfileImage = multer.diskStorage({
+  destination: function(req, file, cb) {
+  let dir = `profile-images/`; // specify the path you want to store file
+  //check if file path exists or create the directory
+  fs.access(dir, function(error) {
+    if (error) {
+      console.log("Directory does not exist.");
+      return fs.mkdir('profile-images', error => cb(error, dir));
+    } else {
+      console.log("Directory exists.");
+      return cb(null, dir);
+    }
+  });
+  },
+    filename: function(req, file, cb) {
+    cb(null, Date.now() + "-" + file.originalname); // added Date.now() so that name will be unique
+  }
+});
+  
+const uploadProfileImage = multer({ storage: storageProfileImage });
+
+app.post("/upload", authenticateToken, verifyBlockedAccount, uploadFiles.single("file"), async (req, res, next) => {
   try{
     const file = req.file;
+
     if (!file) {
-      const error = new Error("Please upload a file");
+      const error = new Error(errorMessage.uploadFile);
       error.statusCode = 400;
-      logger.error("Please upload a file", {route: req?.originalUrl});
+      logger.error(errorMessage.uploadFile, {route: req?.originalUrl});
       return next(error);
     }
 
     const bodyParse = JSON.parse(JSON.stringify(req.body));
-    const token = bodyParse?.token || "";
     const location = JSON.parse(bodyParse?.location) || {};
 
     if(!location?.latitude || !location?.longitude) {
-      throw new Error("Failed to send! Can't measure current location.");
+      throw new Error(errorMessage.positionError);
     }
-  
-    // send to devices in push notification
-    // first get all device tokens according to radius
-    // const tokens = await getDeviceTokens();
-    const tokens = await getLocationInRadius(location.latitude, location.longitude);
+
+    // get user details
+    const resDevice = await Devices.findOne({ where: { id: req.user.id } });
+      
+    if (resDevice === null) {
+      throw new Error(errorMessage.account404);
+    }
     
-    const tokensArray = tokens.filter((d) => d.token != token).map(d => d.token);
-    // const tokensArray = tokens.map(d => d.token);
+    const tokens = await getLocationInRadius(location.latitude, location.longitude, resDevice.id);
+    
+    const tokensArray = tokens.map(d => d.token);
 
     console.log(tokensArray, 'tokensArray');
 
     const batchSize = 500;
     const batches = [];
+
     for (let i = 0; i < tokensArray.length; i += batchSize) {
       batches.push(tokensArray.slice(i, i + batchSize));
     }
+
+    const profile_img = resDevice.profile_img ? `${SERVER_URL}/${resDevice.profile_img}` : "";
 
     // Map batches to promises for concurrent processing
     const notifications = batches.map((batch) => {
       const message = {
         data: {
+          user_name: resDevice.name || "unknown",
+          id: `${resDevice.id}`,
+          profileImage: `${profile_img}`,
           audio_url: `${SERVER_URL}/resources/${file.filename}`
           // audio_url: `${fileStatic}`
         },
@@ -126,17 +165,22 @@ app.post("/upload", uploadFiles.single("file"), async (req, res, next) => {
   }
 });
 
-app.post("/device-token", async (req, res) => {
+app.post("/device-token", authenticateToken, async (req, res) => {
   try{
     const token = req.body.token || "";
 
-    if(token) {
-      const tokenRes = await Devices.findOne({ where: { token: token } });
-      
-    if (tokenRes === null) {
-        const device = await Devices.create( { token } );
-      }
+    if(!token) {
+      throw new Error(errorMessage.common);
     }
+
+    const resDevice = await Devices.findOne({ where: { id: req.user.id } });
+      
+    if (resDevice === null) {
+      return res.status(404).json({ success: false, error: errorMessage.account404 });
+    }
+
+    // update token in table
+    const update = await Devices.update( { token: token }, { where: { id: resDevice.id } } );
 
     return res.json({ success: true, token });
   } catch(err){
@@ -145,14 +189,14 @@ app.post("/device-token", async (req, res) => {
   }
 });
 
-app.post("/save-location", async (req, res) => {
+app.post("/save-location", authenticateToken, async (req, res) => {
   try{
-    const token = req.body.token || "";
     const latitude = req.body.latitude || "";
     const longitude = req.body.longitude || "";
+    const heading = +req.body.heading || 0;
 
-    if(token && latitude && longitude) {
-      const device = await Locations.create( { "token": token, "lat": latitude, "lng": longitude } );
+    if(latitude && longitude) {
+      const device = await Locations.create( { "device_id": req.user.id, "lat": latitude, "lng": longitude, heading } );
     }
 
     return res.json({ success: true });
@@ -162,21 +206,18 @@ app.post("/save-location", async (req, res) => {
   }
 });
 
-app.put("/audio-play-status", async (req, res) => {
+app.put("/audio-play-status", authenticateToken, async (req, res) => {
   try{
-    const token = req.body.token || "";
     const status = req.body.status;
 
-    if(token) {
-      const res = await Devices.update(
-        { play_audio: status },
-        {
-          where: {
-            token: token,
-          },
+    const resUpdate = await Devices.update(
+      { play_audio: status },
+      {
+        where: {
+          id: req.user.id,
         },
-      );
-    }
+      },
+    );
 
     return res.json({ success: true, status });
   } catch(err){
@@ -185,21 +226,18 @@ app.put("/audio-play-status", async (req, res) => {
   }
 });
 
-app.put("/notification-status", async (req, res) => {
+app.put("/notification-status", authenticateToken, async (req, res) => {
   try{
-    const token = req.body.token || "";
     const status = req.body.status;
 
-    if(token) {
-      const res = await Devices.update(
-        { status: status },
-        {
-          where: {
-            token: token,
-          },
+    const resUpdate = await Devices.update(
+      { status: status },
+      {
+        where: {
+          id: req.user.id,
         },
-      );
-    }
+      },
+    );
 
     return res.json({ success: true, status });
   } catch(err){
@@ -208,20 +246,405 @@ app.put("/notification-status", async (req, res) => {
   }
 });
 
-app.post("/fetch-settings", async (req, res) => {
+app.post("/fetch-settings", authenticateToken, async (req, res) => {
   try{
-    const token = req.body.token || "";
     let status = true;
     let play_audio = true;
 
-    if(token) {
-      const tokenRes = await Devices.findOne({ where: { token: token } }, { raw: true });
-      if(tokenRes)
-        status = tokenRes.status;
-        play_audio = tokenRes.play_audio;
-    }
+    const deviceRes = await Devices.findOne({ where: { id: req.user.id } }, { raw: true });
+      if(deviceRes)
+        status = deviceRes.status;
+        play_audio = deviceRes.play_audio;
 
     return res.json({ success: true, status: status, play_audio });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/fetch-near-devices", authenticateToken, async (req, res) => {
+  try{
+    const location = JSON.parse(req.body?.location) || {};
+
+    let resArray = [];
+
+    if(location?.latitude && location?.longitude) {
+      resData = await getLocationInRadius(location.latitude, location.longitude, req.user.id);
+
+      resArray = resData.map((d) => { return { lat: d.lat, lng: d.lng, name: d.name, heading: d.heading } });
+    }
+
+    return res.json({ success: true, data: resArray });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/mobile-verification", async (req, res) => {
+  try{
+    const otp = 1111;
+
+    const mob = /^[1-9]{1}[0-9]{9}$/;
+
+    const mobile = (req.body.mobile || "").trim();
+
+    if (mob.test(mobile) == false) {
+      return res.status(400).json({ success: false, error: errorMessage.mobileInput });
+    }
+
+    let device_id;
+
+    const resDevice = await Devices.findOne({ where: { mobile: mobile } });
+      
+    if (resDevice === null) {
+        const create = await Devices.create( { "mobile": mobile } );
+        device_id = create.id;
+    } else {
+        if(resDevice.blocked === true) {
+          return res.status(400).json({ success: false, error: errorMessage.blockedAccount });
+        }
+
+        //check if there are already 3 unused otp request then  it will block the action
+        const otpRes = await sequelize.query('SELECT id FROM `device_otps` WHERE createdAt >= DATE_SUB( NOW(), INTERVAL 10 MINUTE ) AND status = false AND device_id = '+resDevice.id + ' LIMIT 2', {
+          type: QueryTypes.SELECT,
+        });
+
+        if(otpRes.length >= 2) {
+          return res.status(400).json({ success: false, error: errorMessage.otpSentExceeded });
+        }
+
+        device_id = resDevice.id
+    }
+
+    //new entry in otp table
+    const create = await Otp.create( { "device_id": device_id, "otp":  otp} );
+
+    return res.json({ success: true, mobile });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/otp-verification", async (req, res) => {
+  try{
+    const otpCheck = /^[0-9]{4}$/;
+    const mob = /^[1-9]{1}[0-9]{9}$/;
+
+    const mobile = (req.body.mobile || "").trim();
+    const otp = (req.body.otp || "").trim();
+
+    if (otpCheck.test(otp) == false) {
+      return res.status(400).json({ success: false, error: errorMessage.invalidOTP });
+    }
+
+    if (mob.test(mobile) == false) {
+      return res.status(400).json({ success: false, error: errorMessage.mobileInput });
+    }
+
+    const resDevice = await Devices.findOne({ where: { mobile: mobile } });
+
+    if(resDevice === null) {
+      return res.status(404).json({ success: false, error: errorMessage.account404 });
+    }
+
+    if(resDevice.blocked === true) {
+      return res.status(400).json({ success: false, error: errorMessage.blockedAccount });
+    }
+      
+    const otpRes = await sequelize.query('SELECT id FROM `device_otps` WHERE createdAt >= DATE_SUB( NOW(), INTERVAL 10 MINUTE ) AND otp = '+otp+' AND status = false AND device_id = '+resDevice.id, {
+      type: QueryTypes.SELECT,
+    });
+    
+    // [ { id: 18 } ] => otpRes
+
+    if(otpRes.length === 0) {
+      return res.status(400).json({ success: false, error: "Invalid OTP!" });
+    }
+
+    // update otp table
+    const update = await Otp.update( { status: true }, { where: { device_id: resDevice.id } } );
+
+    // [ 6 ] update
+
+    const token = generateAccessToken(resDevice);
+
+    return res.json({ "success": true, "jwt": token,  "mobile": resDevice.mobile });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/pin-set", authenticateToken, async (req, res) => {
+  try{
+    const pinCheck = /^[0-9]{4}$/;
+
+    const pin = (req.body.pin || "").trim();
+
+    if (pinCheck.test(pin) == false) {
+      return res.status(400).json({ success: false, error: errorMessage.invalidOTP });
+    }
+
+    const resDevice = await Devices.findOne({ where: { id: req.user.id } });
+
+    if(resDevice === null) {
+      return res.status(404).json({ success: false, error: errorMessage.account404 });
+    }
+
+    if(resDevice.blocked === true) {
+      return res.status(400).json({ success: false, error: errorMessage.blockedAccount });
+    }
+
+    // update pin in table
+    const update = await Devices.update( { mobile_pin: pin, otp_retry_count: 0 }, { where: { id: resDevice.id } } );
+
+    return res.json({ "success": true, "pin": pin });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/pin-login", async (req, res) => {
+  try{
+    const pinCheck = /^[0-9]{4}$/;
+    const mob = /^[1-9]{1}[0-9]{9}$/;
+
+    const mobile = (req.body.mobile || "").trim();
+    let pin = (req.body.pin || "").trim();
+    pin = +pin || 0;
+
+    if (pinCheck.test(pin) == false) {
+      return res.status(400).json({ success: false, error: errorMessage.invalidOTP });
+    }
+
+    const resDevice = await Devices.findOne({ where: { mobile: mobile } });
+
+    if(resDevice === null) {
+      return res.status(404).json({ success: false, error: errorMessage.account404 });
+    }
+
+    if(resDevice.otp_retry_count >= otpRetryCount) {
+      return res.status(400).json({ success: false, error: errorMessage.otpRetryExceeded, otp_retry_count: resDevice.otp_retry_count });
+    }
+
+    if(resDevice.mobile_pin !== pin) {
+      await Devices.update( { otp_retry_count: (+resDevice.otp_retry_count+1) }, { where: { id: resDevice.id } } );
+
+      return res.status(400).json({ success: false, error: errorMessage.wrongOTP, otp_retry_count: (+resDevice.otp_retry_count+1) });
+    }
+
+    if(resDevice.blocked === true) {
+      return res.status(400).json({ success: false, error: errorMessage.blockedAccount, otp_retry_count: resDevice.otp_retry_count });
+    }
+
+    const token = generateAccessToken(resDevice);
+
+    if(+resDevice.otp_retry_count > 0) {
+       await Devices.update( { otp_retry_count: 0 }, { where: { id: resDevice.id } } );
+    }
+
+    return res.json({ "success": true, "jwt": token,  "mobile": resDevice.mobile });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/profile-details", authenticateToken, async (req, res) => {
+  try{
+    const resDevice = await Devices.findOne({ where: { id: req.user.id } });
+
+    if(resDevice === null) {
+      return res.status(404).json({ success: false, error: errorMessage.account404 });
+    }
+
+    const profile_img = resDevice.profile_img ? `${SERVER_URL}/${resDevice.profile_img}` : null;
+
+    return res.json({ "success": true, "data": {"name": resDevice.name, "email": resDevice.email, "mobile": resDevice.mobile, "location": resDevice.location, profile_img } });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/profile-details", authenticateToken, async (req, res) => {
+  try{
+    const name = (req.body.name || "").trim();
+    const email = (req.body.email || "").trim();
+    // const mobile = (req.body.mobile || "").trim();
+    const location = (req.body.location || "").trim();
+
+    const resDevice = await Devices.findOne({ where: { id: req.user.id } });
+
+    if(resDevice === null) {
+      return res.status(404).json({ success: false, error: errorMessage.account404 });
+    }
+    
+    const update = await Devices.update( { name, email, location }, { where: { id: resDevice.id } } );
+
+    const profile_img = resDevice.profile_img ? `${SERVER_URL}/${resDevice.profile_img}` : null;
+
+    return res.json({ "success": true, "data": {name, email, "mobile": resDevice.mobile, location, profile_img } });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/profile-upload", authenticateToken, uploadProfileImage.single("photo"), async (req, res, next) => {
+  try{
+    const file = req.file;
+
+    if (!file) {
+      const error = new Error(errorMessage.uploadFile);
+      error.statusCode = 400;
+      logger.error(errorMessage.uploadFile, {route: req?.originalUrl});
+      return next(error);
+    }
+
+    // get user details
+    const resDevice = await Devices.findOne({ where: { id: req.user.id } });
+      
+    if (resDevice === null) {
+      throw new Error(errorMessage.account404);
+    }
+
+    const update = await Devices.update( { profile_img: file.path }, { where: { id: resDevice.id } } );
+    
+    const profile_img = `${SERVER_URL}/${file.path}`
+
+    return res.json({ "success": true, "data": {"name": resDevice.name, "email": resDevice.email, "mobile": resDevice.mobile, "location": resDevice.location, profile_img } });
+  } catch(error){
+    logger.error(error?.message, {route: req?.originalUrl});
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.post("/admin-login", [validateResource(validator.adminLogin)], async (req, res) => {
+  try{
+    const email = req.body.email;
+    const password = req.body.password;
+
+    const details = await Admin.findOne({ where: { email, password, status: 1 } });
+
+    if(details === null) {
+      return res.status(404).json({ success: false, error: errorMessage.account404 });
+    }
+
+    const token = generateAccessTokenForAdmin(details);
+
+    return res.json({ "success": true, "token": token });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/user-list", authenticateTokenForAdmin, async (req, res) => {
+  try{
+    const limit = +req?.query?.results || 10;
+    const page = +req?.query?.page || 1;
+    const offset = (page - 1) * limit;
+
+    const list = await Devices.findAll({
+      attributes: ['id', 'mobile', 'name', 'email', 'location', 'profile_img', 'blocked'],
+      limit,
+      offset
+    });
+
+    const count = await Devices.count();
+
+    return res.json({ "success": true, list, count });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/reported-user-list", authenticateTokenForAdmin, async (req, res) => {
+  try{
+    const limit = +req?.query?.results || 10;
+    const page = +req?.query?.page || 1;
+    const offset = (page - 1) * limit;
+
+    const list = await sequelize.query('SELECT id, mobile, name, email, location, profile_img, blocked,(SELECT count(t1.id) FROM reported_users t1 WHERE t1.admin_action = 0 AND reported_id = devices.id GROUP BY t1.reported_id) total FROM devices WHERE id IN (SELECT reported_id FROM reported_users WHERE admin_action = 0 GROUP BY reported_id) LIMIT '+ offset + ', ' + limit +'', {
+      type: QueryTypes.SELECT,
+    });
+
+    const count = await sequelize.query('SELECT COUNT(id) total FROM devices WHERE id IN (SELECT reported_id FROM reported_users WHERE admin_action = 0 GROUP BY reported_id)', {
+      type: QueryTypes.SELECT,
+    });
+
+    return res.json({ "success": true, list, count: count[0]['total'] || 0 });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put("/block-user-action/:id", authenticateTokenForAdmin, async (req, res) => {
+  try{
+    const id = +req.params.id || 0;
+
+    if(!id) {
+      return res.status(400).json({ success: false, error: "Invalid action!" });
+    }
+
+    await ReportedUsers.update( { admin_action: true }, { where: { reported_id: id, admin_action: false } } );
+
+    await Devices.update( { blocked: true }, { where: { id } } );
+
+    return res.json({ "success": true });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put("/block-unblock-action/:id", authenticateTokenForAdmin, async (req, res) => {
+  try{
+    const id = +req.params.id || 0;
+    const status = req.body.status || false;
+
+    if(!id) {
+      return res.status(400).json({ success: false, error: errorMessage.invalidAction });
+    }
+
+    await Devices.update( { blocked: status }, { where: { id } } );
+
+    return res.json({ "success": true });
+  } catch(err){
+    logger.error(err?.message, {route: req?.originalUrl});
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/report-user/:id", authenticateToken, async (req, res) => {
+  try{
+    const id = +req.params.id || 0;
+
+    if(!id) {
+      return res.status(400).json({ success: false, error: errorMessage.invalidAction });
+    }
+
+    const resDevice = await Devices.findOne({ where: { id } });
+
+    if(resDevice === null) {
+      return res.status(404).json({ success: false, error: "Reported " + errorMessage.account404 });
+    }
+
+    if(resDevice.blocked === false) {
+      const create = await ReportedUsers.create({reported_id: id, reported_by: req.user.id});
+    }
+
+    return res.json({ "success": true });
   } catch(err){
     logger.error(err?.message, {route: req?.originalUrl});
     return res.status(500).json({ success: false, error: err.message });

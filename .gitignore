@@ -8,6 +8,7 @@
 # testing
 /coverage
 /myuploads
+/profile-images
 
 # production
 /build
