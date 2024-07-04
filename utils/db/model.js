@@ -18,6 +18,14 @@ const Devices = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    country_code: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    calling_code: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
     name: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -50,7 +58,7 @@ const Devices = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
-    otp_retry_count: {
+    pin_retry_count: {
       type: DataTypes.INTEGER,
       defaultValue: 0
     }

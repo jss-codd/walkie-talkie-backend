@@ -16,7 +16,7 @@ const { SERVER_URL, errorMessage } = require("./utils/Constants");
 const logger = require("./logger");
 var serviceAccount = require("./serviceAccountKey.json");
 const {sequelize} = require('./utils/db/config');
-const { generateAccessToken, authenticateToken, generateAccessTokenForAdmin, authenticateTokenForAdmin, verifyBlockedAccount } = require('./utils/Token');
+const { generateAccessToken, authenticateToken, generateAccessTokenForAdmin, authenticateTokenForAdmin, verifyAccount } = require('./utils/Token');
 const validateResource = require('./utils/ValidateResource');
 const validator = require('./utils/Validator');
 
@@ -26,7 +26,7 @@ app.use(bodyParser.json());
 
 const port = 5000;
 
-const otpRetryCount = 5;
+const pinRetryCount = 5;
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -85,7 +85,7 @@ const storageProfileImage = multer.diskStorage({
   
 const uploadProfileImage = multer({ storage: storageProfileImage });
 
-app.post("/upload", authenticateToken, verifyBlockedAccount, uploadFiles.single("file"), async (req, res, next) => {
+app.post("/upload", authenticateToken, verifyAccount, uploadFiles.single("file"), async (req, res, next) => {
   try{
     const file = req.file;
 
@@ -102,15 +102,8 @@ app.post("/upload", authenticateToken, verifyBlockedAccount, uploadFiles.single(
     if(!location?.latitude || !location?.longitude) {
       throw new Error(errorMessage.positionError);
     }
-
-    // get user details
-    const resDevice = await Devices.findOne({ where: { id: req.user.id } });
-      
-    if (resDevice === null) {
-      throw new Error(errorMessage.account404);
-    }
     
-    const tokens = await getLocationInRadius(location.latitude, location.longitude, resDevice.id);
+    const tokens = await getLocationInRadius(location.latitude, location.longitude, req.resDevice.id);
     
     const tokensArray = tokens.map(d => d.token);
 
@@ -123,14 +116,14 @@ app.post("/upload", authenticateToken, verifyBlockedAccount, uploadFiles.single(
       batches.push(tokensArray.slice(i, i + batchSize));
     }
 
-    const profile_img = resDevice.profile_img ? `${SERVER_URL}/${resDevice.profile_img}` : "";
+    const profile_img = req.resDevice.profile_img ? `${SERVER_URL}/${req.resDevice.profile_img}` : "";
 
     // Map batches to promises for concurrent processing
     const notifications = batches.map((batch) => {
       const message = {
         data: {
-          user_name: resDevice.name || "unknown",
-          id: `${resDevice.id}`,
+          user_name: req.resDevice.name || "unknown",
+          id: `${req.resDevice.id}`,
           profileImage: `${profile_img}`,
           audio_url: `${SERVER_URL}/resources/${file.filename}`
           // audio_url: `${fileStatic}`
@@ -165,13 +158,9 @@ app.post("/upload", authenticateToken, verifyBlockedAccount, uploadFiles.single(
   }
 });
 
-app.post("/device-token", authenticateToken, async (req, res) => {
+app.post("/device-token", [authenticateToken, validateResource(validator.deviceToken)], async (req, res) => {
   try{
-    const token = req.body.token || "";
-
-    if(!token) {
-      throw new Error(errorMessage.common);
-    }
+    const token = req.body.token;
 
     const resDevice = await Devices.findOne({ where: { id: req.user.id } });
       
@@ -189,28 +178,26 @@ app.post("/device-token", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/save-location", authenticateToken, async (req, res) => {
+app.post("/save-location", [authenticateToken, validateResource(validator.saveLocation)], async (req, res) => {
   try{
-    const latitude = req.body.latitude || "";
-    const longitude = req.body.longitude || "";
+    const latitude = req.body.latitude;
+    const longitude = req.body.longitude;
     const heading = +req.body.heading || 0;
 
-    if(latitude && longitude) {
-      const device = await Locations.create( { "device_id": req.user.id, "lat": latitude, "lng": longitude, heading } );
-    }
+    await Locations.create( { "device_id": req.user.id, "lat": latitude, "lng": longitude, heading } );
 
     return res.json({ success: true });
   } catch(err){
-    logger.error(err?.message, {route: req?.originalUrl});
+    logger.error(err?.message, { route: req?.originalUrl });
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.put("/audio-play-status", authenticateToken, async (req, res) => {
+app.put("/audio-play-status", [authenticateToken, validateResource(validator.audioPlayStatus)], async (req, res) => {
   try{
     const status = req.body.status;
 
-    const resUpdate = await Devices.update(
+    await Devices.update(
       { play_audio: status },
       {
         where: {
@@ -226,11 +213,11 @@ app.put("/audio-play-status", authenticateToken, async (req, res) => {
   }
 });
 
-app.put("/notification-status", authenticateToken, async (req, res) => {
+app.put("/notification-status", [authenticateToken, validateResource(validator.notificationStatus)], async (req, res) => {
   try{
     const status = req.body.status;
 
-    const resUpdate = await Devices.update(
+    await Devices.update(
       { status: status },
       {
         where: {
@@ -282,31 +269,33 @@ app.post("/fetch-near-devices", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/mobile-verification", async (req, res) => {
+app.post("/mobile-verification", [validateResource(validator.mobileVerification)], async (req, res) => {
   try{
     const otp = 1111;
 
     const mob = /^[1-9]{1}[0-9]{9}$/;
 
-    const mobile = (req.body.mobile || "").trim();
+    const mobile = req.body.mobile;
+    const countryCode = req.body.countryCode;
+    const callingCode = req.body.callingCode;
 
-    if (mob.test(mobile) == false) {
-      return res.status(400).json({ success: false, error: errorMessage.mobileInput });
-    }
+    // if (mob.test(mobile) == false) {
+    //   return res.status(400).json({ success: false, error: errorMessage.mobileInput });
+    // }
 
     let device_id;
 
     const resDevice = await Devices.findOne({ where: { mobile: mobile } });
       
     if (resDevice === null) {
-        const create = await Devices.create( { "mobile": mobile } );
+        const create = await Devices.create( { "mobile": mobile, country_code: countryCode, calling_code: callingCode } );
         device_id = create.id;
     } else {
         if(resDevice.blocked === true) {
           return res.status(400).json({ success: false, error: errorMessage.blockedAccount });
         }
 
-        //check if there are already 3 unused otp request then  it will block the action
+        //check if there are already 3 unused otp request then it will block the action
         const otpRes = await sequelize.query('SELECT id FROM `device_otps` WHERE createdAt >= DATE_SUB( NOW(), INTERVAL 10 MINUTE ) AND status = false AND device_id = '+resDevice.id + ' LIMIT 2', {
           type: QueryTypes.SELECT,
         });
@@ -319,7 +308,7 @@ app.post("/mobile-verification", async (req, res) => {
     }
 
     //new entry in otp table
-    const create = await Otp.create( { "device_id": device_id, "otp":  otp} );
+    await Otp.create( { "device_id": device_id, "otp":  otp} );
 
     return res.json({ success: true, mobile });
   } catch(err){
@@ -328,21 +317,21 @@ app.post("/mobile-verification", async (req, res) => {
   }
 });
 
-app.post("/otp-verification", async (req, res) => {
+app.post("/otp-verification", [validateResource(validator.otpVerification)], async (req, res) => {
   try{
     const otpCheck = /^[0-9]{4}$/;
     const mob = /^[1-9]{1}[0-9]{9}$/;
 
-    const mobile = (req.body.mobile || "").trim();
-    const otp = (req.body.otp || "").trim();
+    const mobile = req.body.mobile;
+    const otp = req.body.otp;
 
     if (otpCheck.test(otp) == false) {
       return res.status(400).json({ success: false, error: errorMessage.invalidOTP });
     }
 
-    if (mob.test(mobile) == false) {
-      return res.status(400).json({ success: false, error: errorMessage.mobileInput });
-    }
+    // if (mob.test(mobile) == false) {
+    //   return res.status(400).json({ success: false, error: errorMessage.mobileInput });
+    // }
 
     const resDevice = await Devices.findOne({ where: { mobile: mobile } });
 
@@ -378,28 +367,18 @@ app.post("/otp-verification", async (req, res) => {
   }
 });
 
-app.post("/pin-set", authenticateToken, async (req, res) => {
+app.post("/pin-set", [authenticateToken, verifyAccount, validateResource(validator.pinSet)], async (req, res) => {
   try{
     const pinCheck = /^[0-9]{4}$/;
 
-    const pin = (req.body.pin || "").trim();
+    const pin = req.body.pin;
 
     if (pinCheck.test(pin) == false) {
       return res.status(400).json({ success: false, error: errorMessage.invalidOTP });
     }
 
-    const resDevice = await Devices.findOne({ where: { id: req.user.id } });
-
-    if(resDevice === null) {
-      return res.status(404).json({ success: false, error: errorMessage.account404 });
-    }
-
-    if(resDevice.blocked === true) {
-      return res.status(400).json({ success: false, error: errorMessage.blockedAccount });
-    }
-
     // update pin in table
-    const update = await Devices.update( { mobile_pin: pin, otp_retry_count: 0 }, { where: { id: resDevice.id } } );
+    await Devices.update( { mobile_pin: pin, pin_retry_count: 0 }, { where: { id: req.resDevice.id } } );
 
     return res.json({ "success": true, "pin": pin });
   } catch(err){
@@ -408,13 +387,13 @@ app.post("/pin-set", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/pin-login", async (req, res) => {
+app.post("/pin-login", [validateResource(validator.pinLogin)], async (req, res) => {
   try{
     const pinCheck = /^[0-9]{4}$/;
     const mob = /^[1-9]{1}[0-9]{9}$/;
 
-    const mobile = (req.body.mobile || "").trim();
-    let pin = (req.body.pin || "").trim();
+    const mobile = req.body.mobile;
+    let pin = req.body.pin;
     pin = +pin || 0;
 
     if (pinCheck.test(pin) == false) {
@@ -427,24 +406,24 @@ app.post("/pin-login", async (req, res) => {
       return res.status(404).json({ success: false, error: errorMessage.account404 });
     }
 
-    if(resDevice.otp_retry_count >= otpRetryCount) {
-      return res.status(400).json({ success: false, error: errorMessage.otpRetryExceeded, otp_retry_count: resDevice.otp_retry_count });
+    if(resDevice.pin_retry_count >= pinRetryCount) {
+      return res.status(400).json({ success: false, error: errorMessage.otpRetryExceeded, pin_retry_count: resDevice.pin_retry_count });
     }
 
     if(resDevice.mobile_pin !== pin) {
-      await Devices.update( { otp_retry_count: (+resDevice.otp_retry_count+1) }, { where: { id: resDevice.id } } );
+      await Devices.update( { pin_retry_count: (+resDevice.pin_retry_count+1) }, { where: { id: resDevice.id } } );
 
-      return res.status(400).json({ success: false, error: errorMessage.wrongOTP, otp_retry_count: (+resDevice.otp_retry_count+1) });
+      return res.status(400).json({ success: false, error: errorMessage.wrongOTP, pin_retry_count: (+resDevice.pin_retry_count+1) });
     }
 
     if(resDevice.blocked === true) {
-      return res.status(400).json({ success: false, error: errorMessage.blockedAccount, otp_retry_count: resDevice.otp_retry_count });
+      return res.status(400).json({ success: false, error: errorMessage.blockedAccount, pin_retry_count: resDevice.pin_retry_count });
     }
 
     const token = generateAccessToken(resDevice);
 
-    if(+resDevice.otp_retry_count > 0) {
-       await Devices.update( { otp_retry_count: 0 }, { where: { id: resDevice.id } } );
+    if(+resDevice.pin_retry_count > 0) {
+       await Devices.update( { pin_retry_count: 0 }, { where: { id: resDevice.id } } );
     }
 
     return res.json({ "success": true, "jwt": token,  "mobile": resDevice.mobile });
@@ -471,12 +450,11 @@ app.get("/profile-details", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/profile-details", authenticateToken, async (req, res) => {
+app.post("/profile-details", [authenticateToken, validateResource(validator.profileDetails)], async (req, res) => {
   try{
-    const name = (req.body.name || "").trim();
-    const email = (req.body.email || "").trim();
-    // const mobile = (req.body.mobile || "").trim();
-    const location = (req.body.location || "").trim();
+    const name = req.body.name;
+    const email = req.body.email;
+    const location = req.body.location;
 
     const resDevice = await Devices.findOne({ where: { id: req.user.id } });
 
@@ -495,7 +473,7 @@ app.post("/profile-details", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/profile-upload", authenticateToken, uploadProfileImage.single("photo"), async (req, res, next) => {
+app.post("/profile-upload", [authenticateToken, verifyAccount, uploadProfileImage.single("photo")], async (req, res, next) => {
   try{
     const file = req.file;
 
@@ -506,18 +484,11 @@ app.post("/profile-upload", authenticateToken, uploadProfileImage.single("photo"
       return next(error);
     }
 
-    // get user details
-    const resDevice = await Devices.findOne({ where: { id: req.user.id } });
-      
-    if (resDevice === null) {
-      throw new Error(errorMessage.account404);
-    }
-
-    const update = await Devices.update( { profile_img: file.path }, { where: { id: resDevice.id } } );
+    await Devices.update( { profile_img: file.path }, { where: { id: req.resDevice.id } } );
     
-    const profile_img = `${SERVER_URL}/${file.path}`
+    const profile_img = `${ SERVER_URL }/${ file.path }`;
 
-    return res.json({ "success": true, "data": {"name": resDevice.name, "email": resDevice.email, "mobile": resDevice.mobile, "location": resDevice.location, profile_img } });
+    return res.json({ "success": true, "data": {"name": req.resDevice.name, "email": req.resDevice.email, "mobile": req.resDevice.mobile, "location": req.resDevice.location, profile_img } });
   } catch(error){
     logger.error(error?.message, {route: req?.originalUrl});
     res.status(500).json({
@@ -626,7 +597,7 @@ app.put("/block-unblock-action/:id", authenticateTokenForAdmin, async (req, res)
   }
 });
 
-app.post("/report-user/:id", authenticateToken, async (req, res) => {
+app.post("/report-user/:id", [authenticateToken], async (req, res) => {
   try{
     const id = +req.params.id || 0;
 

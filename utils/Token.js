@@ -82,7 +82,7 @@ function authenticateTokenForAdmin(req, res, next) {
   next();
 }
 
-async function verifyBlockedAccount(req, res, next) {
+async function verifyAccount(req, res, next) {
   const resDevice = await Devices.findOne({ where: { id: req.user.id } });
 
   if(resDevice === null) {
@@ -92,8 +92,10 @@ async function verifyBlockedAccount(req, res, next) {
   if(resDevice.blocked === true) {
     return res.status(400).json({ success: false, error: errorMessage.blockedAccount });
   }
+
+  req.resDevice = resDevice;
   
   next();
 }
 
-module.exports = { generateAccessToken, authenticateToken, generateAccessTokenForAdmin, authenticateTokenForAdmin, verifyBlockedAccount };
+module.exports = { generateAccessToken, authenticateToken, generateAccessTokenForAdmin, authenticateTokenForAdmin, verifyAccount };
