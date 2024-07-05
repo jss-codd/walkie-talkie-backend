@@ -130,8 +130,8 @@ app.post("/upload", authenticateToken, verifyAccount, uploadFiles.single("file")
         },
         tokens: [...batch],
         notification: {
-          "title":"Recording App",
-          "body":"New incoming recording"
+          "title": "Incoming audio from Truckaan Wale",
+          "body": ""
          },
          "android": {
            "priority": "high",
@@ -426,7 +426,7 @@ app.post("/pin-login", [validateResource(validator.pinLogin)], async (req, res) 
        await Devices.update( { pin_retry_count: 0 }, { where: { id: resDevice.id } } );
     }
 
-    return res.json({ "success": true, "jwt": token,  "mobile": resDevice.mobile });
+    return res.json({ "success": true, "jwt": token,  "mobile": resDevice.mobile, token: resDevice.token });
   } catch(err){
     logger.error(err?.message, {route: req?.originalUrl});
     return res.status(500).json({ success: false, error: err.message });
