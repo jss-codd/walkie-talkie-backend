@@ -259,7 +259,7 @@ app.post("/fetch-near-devices", authenticateToken, async (req, res) => {
     if(location?.latitude && location?.longitude) {
       resData = await getLocationInRadius(location.latitude, location.longitude, req.user.id);
 
-      resArray = resData.map((d) => { return { lat: d.lat, lng: d.lng, name: d.name, heading: d.heading } });
+      resArray = resData.map((d) => { return { lat: d.lat, lng: d.lng, name: d.name, heading: d.heading, id: d.id } });
     }
 
     return res.json({ success: true, data: resArray });
