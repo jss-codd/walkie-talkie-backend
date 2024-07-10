@@ -92,6 +92,41 @@ const pinLogin = Yup.object({
         .required("PIN is required")
 });
 
+const createChannel = Yup.object({
+    startingValue: Yup.object().shape({
+        formatted_address: Yup.string().trim().required("Starting location required"),
+        place_id: Yup.string().trim().required("Starting location required"),
+    }),
+    
+    destinationValue: Yup.object().shape({
+        formatted_address: Yup.string().trim().required("Starting location required"),
+        place_id: Yup.string().trim().required("Starting location required"),
+    }),
+});
+
+const emailSubmit = Yup.object({
+    email: Yup.string()
+        .trim()
+        .email("Invalid email address")
+        .required("Email is required")
+});
+
+const locationSubmit = Yup.object({
+    location: Yup.string()
+        .trim()
+        .required("Location is required")
+        .max(25, "Location must be 25 characters or less")
+        .min(4, "Location must be 4 characters or more")
+});
+
+const nameSubmit = Yup.object({
+    name: Yup.string()
+        .trim()
+        .required("Name is required")
+        .max(25, "Name must be 25 characters or less")
+        .min(4, "Name must be 4 characters or more"),
+});
+
 const validator = {
     adminLogin,
     profileDetails,
@@ -102,7 +137,11 @@ const validator = {
     mobileVerification,
     otpVerification,
     pinSet,
-    pinLogin
+    pinLogin,
+    createChannel,
+    emailSubmit,
+    locationSubmit,
+    nameSubmit
 };
 
 module.exports = validator;

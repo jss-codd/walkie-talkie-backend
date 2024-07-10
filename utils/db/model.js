@@ -163,9 +163,40 @@ const ReportedUsers = sequelize.define(
   }
 );
 
+const Channels = sequelize.define(
+  'channels',
+  {
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    starting_loc_address: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    starting_loc_place_id: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    destination_loc_address: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    destination_loc_place_id: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    status: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
+  }
+);
+
 (async () => {
     await sequelize.sync();
     // Code here
 })();
 
-module.exports = { Devices, Locations, Otp, Admin, ReportedUsers };
+module.exports = { Devices, Locations, Otp, Admin, ReportedUsers, Channels };
