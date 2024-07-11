@@ -98,4 +98,4 @@ async function verifyAccount(req, res, next) {
   next();
 }
 
-module.exports = { generateAccessToken, authenticateToken, generateAccessTokenForAdmin, authenticateTokenForAdmin, verifyAccount };
+module.exports = { generateAccessToken, authenticateToken, generateAccessTokenForAdmin, authenticateTokenForAdmin, verifyAccount, verifyAccessToken };
