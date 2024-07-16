@@ -49,13 +49,37 @@ io.on('connection', (socket) => {
                     locations[findIndex] = { id: tokenData.data.id, socketId: socket.id, ...location }
                 }
             }
+
+            // socket.broadcast.emit('receiveLocation', locations);
     
             io.emit('receiveLocation', locations);
         }
     });
 
+    socket.on('offer', (data) => {
+        console.log('-----------offer')
+        socket.broadcast.emit('offer', data);
+    });
+    
+    socket.on('answer', (data) => {
+        console.log('---------answer')
+        socket.broadcast.emit('answer', data);
+    });
+    
+    socket.on('candidate', (data) => {
+        console.log('------------candidate')
+        socket.broadcast.emit('candidate', data);
+    });
+
+    socket.on('leaveCall', (data) => {
+        console.log('------------leaveCall')
+        socket.broadcast.emit('leaveCall', data);
+    });
+
     socket.on('disconnect', () => {
         console.log('User disconnected', socket.id);
+
+        socket.broadcast.emit('leaveCall', {});
 
         const userInfo = userMap.get(socket.id);
 
