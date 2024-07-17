@@ -6,6 +6,7 @@ var cors = require('cors');
 const bodyParser = require("body-parser");
 const socketIo = require('socket.io');
 const authJwt = require("./utils/Token");
+const { Devices } = require("./utils/db/model");
 
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -56,9 +57,24 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('offer', (data) => {
-        console.log('-----------offer')
-        socket.broadcast.emit('offer', data);
+    socket.on('offer', async (data) => {
+        console.log('-----------offer');
+
+        // get details of caller & current location
+
+        const findCaller = locations.filter(d => d.socketId == socket.id)
+
+        if(findCaller && findCaller.length > 0) {
+            const calllerId = findCaller[0]['id'];
+            
+            const location = {lat: findCaller[0]['latitude'] || 0, lng: findCaller[0]['longitude'] || 0};
+
+            const resCaller = await Devices.findOne({ where: { id: calllerId } });
+    
+            if(resCaller != null) {
+                socket.broadcast.emit('offer', data, { name: resCaller.name }, location);
+            }
+        }
     });
     
     socket.on('answer', (data) => {

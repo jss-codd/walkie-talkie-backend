@@ -60,7 +60,7 @@ exports.pinLogin = async (req, res) => {
 
         const profile_img = resDevice.profile_img ? `${ SERVER_URL }/${ resDevice.profile_img }` : null;
     
-        return res.json({ "success": true, "jwt": token,  "mobile": resDevice.mobile, token: resDevice.token, "data": {"name": resDevice.name, "email": resDevice.email, "mobile": resDevice.mobile, "location": resDevice.location, profile_img, id: resDevice.id } });
+        return res.json({ "success": true, "jwt": token,  "mobile": resDevice.mobile, token: resDevice.token, "data": {"name": resDevice.name, "email": resDevice.email, "mobile": resDevice.mobile, "location": resDevice.location, profile_img, id: resDevice.id, status: resDevice.status } });
     } catch(err){
         logger.error(err?.message, {route: req?.originalUrl});
         return res.status(500).json({ success: false, error: err.message });
@@ -365,7 +365,7 @@ exports.pinSet = async (req, res) => {
         // return res.json({ "success": true, "pin": pin });
         const profile_img = req.resDevice.profile_img ? `${ SERVER_URL }/${ req.resDevice.profile_img }` : null;
 
-        return res.json({ "success": true, "pin": pin, "data": {"name": req.resDevice.name, "email": req.resDevice.email, "mobile": req.resDevice.mobile, "location": req.resDevice.location, profile_img, id: req.resDevice.id } });
+        return res.json({ "success": true, "pin": pin, "data": {"name": req.resDevice.name, "email": req.resDevice.email, "mobile": req.resDevice.mobile, "location": req.resDevice.location, profile_img, id: req.resDevice.id, status: req.resDevice.status } });
       } catch(err){
         logger.error(err?.message, {route: req?.originalUrl});
         return res.status(500).json({ success: false, error: err.message });
@@ -382,7 +382,7 @@ exports.profileDetails = async (req, res) => {
     
         const profile_img = resDevice.profile_img ? `${ SERVER_URL }/${ resDevice.profile_img }` : null;
     
-        return res.json({ "success": true, "data": {"name": resDevice.name, "email": resDevice.email, "mobile": resDevice.mobile, "location": resDevice.location, profile_img } });
+        return res.json({ "success": true, "data": {"name": resDevice.name, "email": resDevice.email, "mobile": resDevice.mobile, "location": resDevice.location, profile_img, id: resDevice.id, status: resDevice.status } });
       } catch(err){
         logger.error(err?.message, {route: req?.originalUrl});
         return res.status(500).json({ success: false, error: err.message });
@@ -405,7 +405,7 @@ exports.profileDetailsPost = async (req, res) => {
     
         const profile_img = resDevice.profile_img ? `${SERVER_URL}/${resDevice.profile_img}` : null;
     
-        return res.json({ "success": true, "data": {name, email, "mobile": resDevice.mobile, location, profile_img } });
+        return res.json({ "success": true, "data": {name, email, "mobile": resDevice.mobile, location, profile_img, id: resDevice.id, status: resDevice.status } });
       } catch(err){
         logger.error(err?.message, {route: req?.originalUrl});
         return res.status(500).json({ success: false, error: err.message });
