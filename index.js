@@ -23,6 +23,7 @@ app.get('/', (req, res) => {
 let userMap = new Map();
 let locations = [];
 const roomName = 'room';
+let callStatus = false;
 
 // const sockets = await io.in(routeid).fetchSockets(); => To get socket user in the room
 
@@ -114,6 +115,8 @@ io.on('connection', async (socket) => {
 
             io.emit('receiveLocation', locations);
         }
+
+        callStatus = false;
     });
 
     //---------------------------------------
@@ -151,10 +154,16 @@ io.on('connection', async (socket) => {
       
       //---------------------------------------
 
+      socket.on('checkCall', async (payload, callback) => {
+        if(callStatus){
+          callback(false);
+        } else {
+          callback(true);
+        }
+      })
+
       socket.on('joinRoom', async (payload, callback) => {
         let roomId = payload.roomId;
-
-        socket.join(roomId);
         
         if (payload.userType === "caller") {
             socket.join(roomId);
@@ -170,6 +179,7 @@ io.on('connection', async (socket) => {
 
               if(resCaller != null) {
                 socket.broadcast.emit('calling', resCaller.name, location);
+                callStatus = true;
               }
             }
         } else if (payload.userType === "receiver") {
@@ -202,6 +212,8 @@ io.on('connection', async (socket) => {
         socket.to(roomId).emit("endOfCall", {
           callerId: socket.id,
         });
+
+        callStatus = false;
       });
 
       socket.on('answerCall', async (payload) => {
