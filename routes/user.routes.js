@@ -84,13 +84,19 @@ module.exports = app => {
 
     router.post("/report-user/:id", [authJwt.authenticateToken], users.reportUser);
 
-    router.get("/channel-list", [authJwt.authenticateToken], users.channelList);
+    router.get("/channel-list", users.channelList);
 
     router.post("/email-submit", [authJwt.authenticateToken, validateResource(validator.emailSubmit)], users.emailSubmit);
 
     router.post("/location-submit", [authJwt.authenticateToken, validateResource(validator.locationSubmit)], users.locationSubmit);
 
     router.post("/name-submit", [authJwt.authenticateToken, validateResource(validator.nameSubmit)], users.nameSubmit);
+
+    router.post("/icon-tap-action", [authJwt.authenticateToken, validateResource(validator.iconTapAction)], users.iconTapAction);
+
+    router.get("/camera-list/:id", [authJwt.authenticateToken], users.cameraList);
+
+    router.get("/action-icon-list/:id", [authJwt.authenticateToken], users.actionIconList);
 
     app.use('/api/users', router);
   };

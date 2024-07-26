@@ -1,5 +1,5 @@
 const { Sequelize, DataTypes } = require('sequelize');
-const {sequelize} = require('./config');
+const { sequelize } = require('./config');
 
 const Devices = sequelize.define(
   'devices',
@@ -194,9 +194,40 @@ const Channels = sequelize.define(
   }
 );
 
+const ActionIconLocations = sequelize.define(
+  'action_icon_locations',
+  {
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    device_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    lat: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    lng: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    channel_id:{
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    type:{
+      type: DataTypes.STRING,
+      allowNull: false,
+    }
+  }
+);
+
 (async () => {
     await sequelize.sync();
     // Code here
 })();
 
-module.exports = { Devices, Locations, Otp, Admin, ReportedUsers, Channels };
+module.exports = { Devices, Locations, Otp, Admin, ReportedUsers, Channels, ActionIconLocations };

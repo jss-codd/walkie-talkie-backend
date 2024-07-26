@@ -127,6 +127,22 @@ const nameSubmit = Yup.object({
         .min(4, "Name must be 4 characters or more"),
 });
 
+const iconTapAction = Yup.object({
+    location: Yup.object({
+        latitude: Yup.string()
+            .trim()
+            .required("Latitude is required"),
+        longitude: Yup.string()
+            .trim()
+            .required("Longitude is required"),
+    }),
+    route: Yup.number()
+        .required("Route is required"),
+    type: Yup.string()
+        .trim()
+        .required("Type is required"),
+});
+
 const validator = {
     adminLogin,
     profileDetails,
@@ -141,7 +157,8 @@ const validator = {
     createChannel,
     emailSubmit,
     locationSubmit,
-    nameSubmit
+    nameSubmit,
+    iconTapAction
 };
 
 module.exports = validator;

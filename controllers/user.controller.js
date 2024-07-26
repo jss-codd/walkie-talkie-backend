@@ -1,8 +1,8 @@
 const admin = require("firebase-admin");
-const { QueryTypes } = require('sequelize');
+const { QueryTypes, Op } = require('sequelize');
 
-const { getLocationInRadius } = require('../utils/Location');
-const { Devices, Locations, Otp, ReportedUsers, Channels } = require("../utils/db/model");
+const { getLocationInRadius, getCameraInRadius, getActionIconsInRadius } = require('../utils/Location');
+const { Devices, Locations, Otp, ReportedUsers, Channels, ActionIconLocations } = require("../utils/db/model");
 const { SERVER_URL, errorMessage, pinRetryCount } = require("../utils/Constants");
 const { generateAccessToken } = require('../utils/Token');
 const logger = require("../logger");
@@ -464,7 +464,7 @@ exports.reportUser = async (req, res, next) => {
 
 exports.channelList = async (req, res) => {
   try{
-      const list = await Channels.findAll({where: {status: true}});
+      const list = await Channels.findAll( { where: { status: true } } );
   
       return res.json({ "success": true, list });
     } catch(err){
@@ -532,6 +532,72 @@ exports.nameSubmit = async (req, res) => {
       return res.json({ "success": true, "data": {name, email: resDevice.email, mobile: resDevice.mobile, location: resDevice.location, profile_img } });
     } catch(err){
       logger.error(err?.message, {route: req?.originalUrl});
+      return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.iconTapAction = async (req, res) => {
+  try{
+      const latitude = req.body.location.latitude;
+      const longitude = req.body.location.longitude;
+      const route = req.body.route;
+      const type = req.body.type;
+
+      let queryRes = [];
+
+      if(type === "camera") {
+        // first check in db for 50 mt radius then save
+        queryRes = await getCameraInRadius(latitude, longitude, route);
+      } else {
+        // first check in db for 50 mt radius then save & 6 hrs ago data
+        queryRes = await getActionIconsInRadius(latitude, longitude, route, type);
+      }
+
+      if( queryRes.length === 0 ) {
+        await ActionIconLocations.create( { "device_id": req.user.id, "lat": latitude, "lng": longitude, "channel_id": route, "type": type } );
+        
+        const sendObject = { latitude, longitude, type };
+
+        return res.json({ success: true, ...sendObject  });
+      } else {
+        return res.json({ success: true });
+      }
+    } catch(err){
+      logger.error(err?.message, { route: req?.originalUrl });
+      return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.cameraList = async (req, res) => {
+  try{
+      const id = +req.params.id || 0;
+
+      if(!id) {
+        return res.status(400).json({ success: false, error: errorMessage.invalidAction });
+      }
+
+      const list = await ActionIconLocations.findAll({ attributes: ['lat', 'lng'], where: { channel_id: id, type: "camera" }});
+  
+      return res.json({ "success": true, list });
+    } catch(err){
+      logger.error(err?.message, { route: req?.originalUrl });
+      return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.actionIconList = async (req, res) => {
+  try{
+      const id = +req.params.id || 0;
+
+      if(!id) {
+        return res.status(400).json({ success: false, error: errorMessage.invalidAction });
+      }
+
+      const list = await ActionIconLocations.findAll({ attributes: ['lat', 'lng', 'type', 'createdAt'], where: { channel_id: id, type: { [Op.ne]: "camera" } } });
+  
+      return res.json({ "success": true, list });
+    } catch(err){
+      logger.error(err?.message, { route: req?.originalUrl });
       return res.status(500).json({ success: false, error: err.message });
   }
 };
