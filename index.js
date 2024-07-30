@@ -5,14 +5,18 @@ const server = http.createServer(app);
 var cors = require('cors');
 const bodyParser = require("body-parser");
 const socketIo = require('socket.io');
+
 const authJwt = require("./utils/Token");
 const { Devices } = require("./utils/db/model");
+const { SERVER_URL } = require("./utils/Constants");
 
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-const io = socketIo(server);
+const io = socketIo(server, {
+  pingTimeout: 60000
+});
 
 const port = 5000;
 
@@ -23,7 +27,10 @@ app.get('/', (req, res) => {
 let userMap = new Map();
 let locations = [];
 const roomName = 'room';
-let callStatus = false;
+
+let roomData = [];
+let roomUsers = new Map();
+
 
 // const sockets = await io.in(routeid).fetchSockets(); => To get socket user in the room
 
@@ -32,6 +39,20 @@ io.on('connection', async (socket) => {
 
     // using
     socket.on("roomJoin", async (roomId) => {
+        console.log(roomId, '------roomJoin');
+
+        const findIndex = roomData.findIndex(d => d.roomId === roomId);
+
+        if(findIndex === -1) {
+          roomData.unshift( { roomId: roomId, callStatus: false } );
+        }
+
+        const userInfo = roomUsers.get(socket.id);
+
+        if(!userInfo) {
+            roomUsers.set(socket.id, { roomId });
+        }
+
         socket.join(roomId);
     });
 
@@ -61,52 +82,9 @@ io.on('connection', async (socket) => {
         }
     });
 
-    socket.on('offer1', async (data) => {
-        console.log('-----------offer');
-
-        // get details of caller & current location
-
-        const findCaller = locations.filter(d => d.socketId == socket.id)
-
-        if(findCaller && findCaller.length > 0) {
-            const calllerId = findCaller[0]['id'];
-            
-            const location = {lat: findCaller[0]['latitude'] || 0, lng: findCaller[0]['longitude'] || 0};
-
-            const resCaller = await Devices.findOne({ where: { id: calllerId } });
-    
-            if(resCaller != null) {
-                socket.broadcast.emit('offer', data, { name: resCaller.name }, location);
-            }
-        }
-    });
-    
-    socket.on('answer1', (data) => {
-        console.log('---------answer')
-        socket.broadcast.emit('answer', data);
-    });
-    
-    socket.on('candidate1', (data) => {
-        console.log('------------candidate')
-        socket.broadcast.emit('candidate', data);
-    });
-
-    socket.on('leaveCall', (data) => {
-        console.log('------------leaveCall')
-        socket.broadcast.emit('leaveCall', data);
-    });
-
     // using
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
         console.log('User disconnected', socket.id);
-
-        socket.broadcast.emit('user-disconnected', socket.id);
-
-        socket.broadcast.emit('leaveCall', {});
-
-        socket.to(roomName).emit("endOfCall", {
-            callerId: socket.id,
-        });
 
         const userInfo = userMap.get(socket.id);
 
@@ -118,51 +96,79 @@ io.on('connection', async (socket) => {
             io.emit('receiveLocation', locations);
         }
 
-        callStatus = false;
+        // call in free state
+        const roomUserInfo = roomUsers.get(socket.id);
+
+        console.log(roomUserInfo, '------roomUserInfo')
+        console.log(roomData, '------roomData')
+
+        if (roomUserInfo) {
+          const findIndex = roomData.findIndex(d => d.roomId === roomUserInfo.roomId);
+          if(findIndex > 0) {
+            roomData[findIndex]['callStatus'] = false;
+          }
+          
+          roomUsers.delete(socket.id);
+
+          const usersInRoom = await io.in(roomUserInfo.roomId).fetchSockets();
+          console.log(usersInRoom.length, '----------usersInRoom.length');
+
+          if(usersInRoom.length === 0) {
+            roomData = [];
+          }
+
+          socket.to(roomUserInfo.roomId).emit("endOfCall", {
+            callerId: socket.id,
+          });
+        }
     });
 
     //---------------------------------------
 
-      socket.on('join', async (room, callback) => {
-        console.log(room, socket.id, 'join');
-
-        socket.join(room);
-        
-        socket.to(room).emit('user-joined', socket.id); //in room except sender
-      });
-
       // using
-      socket.on('leave', room => {
-        console.log(room, socket.id, 'leave');
+      socket.on('leave', async (room) => {
+        console.log(room, socket.id, '------leave');
 
         socket.leave(room);
-      });
-    
-      socket.on('offer', (room, offer) => {
-        socket.to(room).emit('offer', socket.id, offer);
-      });
-    
-      socket.on('answer', (room, answer) => {
-        socket.to(room).emit('answer', socket.id, answer);
-      });
-    
-      socket.on('candidate', (room, candidate) => {
-        socket.to(room).emit('candidate', socket.id, candidate);
-      });
 
-      socket.on('calling', () => {
-        socket.broadcast.emit('calling');
+        const roomUserInfo = roomUsers.get(socket.id);
+
+        if (roomUserInfo) {
+          roomUsers.delete(socket.id);
+        }
+        
+        const usersInRoom = await io.in(room).fetchSockets();
+          console.log(usersInRoom.length);
+
+          if(usersInRoom.length === 0) {
+            roomData = [];
+          }
       });
       
       //---------------------------------------
 
       // using
-      socket.on('checkCall', async (payload, callback) => {
-        console.log('-----------checkCall')
+      socket.on('checkCall', async (roomId, callback) => {
+        console.log(roomId, '-----------checkCall');
+
+        console.log(roomData, '----------roomData');
+
+        // check in room what is the call status
+
+        const callStatus = roomData.find(d => d.roomId === roomId)?.callStatus ?? true;
+
         if(callStatus){
-          callback(false);
+          callback(1); // on busy call
         } else {
-          callback(true);
+          //check if there are any users in room for receving call
+          const usersInRoom = await io.in(roomId).fetchSockets();
+          console.log(usersInRoom.length);
+
+          if(usersInRoom.length > 1) {
+            callback(2); // continue call
+          } else {
+            callback(3); // No user in room
+          }
         }
       })
 
@@ -170,12 +176,12 @@ io.on('connection', async (socket) => {
       socket.on('joinRoom', async (payload, callback) => {
         let roomId = payload.roomId;
 
-        console.log('-----------joinRoom outer')
+        console.log(roomId,  '-----------joinRoom outer')
         
         if (payload.userType === "caller") {
             console.log('-----------joinRoom inside');
 
-            socket.join(roomId);
+            // socket.join(roomId);
 
             const findCaller = locations.filter(d => d.socketId == socket.id);
 
@@ -186,14 +192,21 @@ io.on('connection', async (socket) => {
 
               const resCaller = await Devices.findOne({ where: { id: calllerId } });
 
+              const profile_img = resCaller.profile_img ? `${ SERVER_URL }/${ resCaller.profile_img }` : null;
+
               if(resCaller != null) {
-                console.log('-----------joinRoom return')
-                socket.broadcast.emit('calling', resCaller.name, location); //To all connected clients except the sender
-                callStatus = true;
+                console.log('-----------joinRoom return');
+                socket.to(roomId).emit('calling', resCaller.name, location, profile_img, calllerId); //To all connected clients except the sender
+
+                // call in busy state
+                const findIndex = roomData.findIndex(d => d.roomId === roomId);
+                if(findIndex > 0) {
+                  roomData[findIndex]['callStatus'] = true;
+                }
               }
             }
         } else if (payload.userType === "receiver") {
-            socket.join(roomId);
+            // socket.join(roomId);
             socket.to(roomId).emit("requestToJoin", {
             callerId: socket.id,
             }); // in room except sender
@@ -202,6 +215,7 @@ io.on('connection', async (socket) => {
 
       // using
       socket.on('teacherLive', async (payload) => {
+        console.log('-----------teacherLive')
         let rtcMessage = payload.rtcMessage;
         let roomId = payload.roomId;
 
@@ -209,6 +223,7 @@ io.on('connection', async (socket) => {
       });
 
       socket.on('ICEcandidate', async (payload) => {
+        console.log('-----------ICEcandidate')
         let calleeId = payload.calleeId;
         let rtcMessage = payload.rtcMessage;
 
@@ -220,16 +235,22 @@ io.on('connection', async (socket) => {
 
       // using
       socket.on('endCall', async (payload) => {
+        console.log('-----------endCall')
         let roomId = payload.roomId;
         socket.to(roomId).emit("endOfCall", {
           callerId: socket.id,
         });
 
-        callStatus = false;
+        // call in free state
+        const findIndex = roomData.findIndex(d => d.roomId === roomId);
+        if(findIndex > 0) {
+          roomData[findIndex]['callStatus'] = false;
+        }
       });
 
       // using
       socket.on('answerCall', async (payload) => {
+        console.log('-----------answerCall')
         let callerId = payload.callerId;
         let rtcMessage = payload.rtcMessage;
         
@@ -244,6 +265,13 @@ io.on('connection', async (socket) => {
         const { roomId, lat, lng, type } = payload;
 
         socket.to(roomId).emit('receiveActionIconLocation', { lat, lng, type, createdAt: new Date() } );
+      });
+
+      // using
+      socket.on('messageToServer', async (payload, callback) => {
+        console.log(payload, '-----------messageToServer');
+
+        callback('Response from server');
       });
 });
 
