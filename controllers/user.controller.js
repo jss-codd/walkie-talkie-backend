@@ -1,7 +1,7 @@
 const admin = require("firebase-admin");
 const { QueryTypes, Op } = require('sequelize');
 
-const { getLocationInRadius, getCameraInRadius, getActionIconsInRadius } = require('../utils/Location');
+const { getLocationInRadius, getCameraInRadius, getActionIconsInRadius, getActionIconLists } = require('../utils/Location');
 const { Devices, Locations, Otp, ReportedUsers, Channels, ActionIconLocations } = require("../utils/db/model");
 const { SERVER_URL, errorMessage, pinRetryCount } = require("../utils/Constants");
 const { generateAccessToken } = require('../utils/Token');
@@ -593,7 +593,7 @@ exports.actionIconList = async (req, res) => {
         return res.status(400).json({ success: false, error: errorMessage.invalidAction });
       }
 
-      const list = await ActionIconLocations.findAll({ attributes: ['lat', 'lng', 'type', 'createdAt'], where: { channel_id: id, type: { [Op.ne]: "camera" } } });
+      const list = await getActionIconLists(id);
   
       return res.json({ "success": true, list });
     } catch(err){

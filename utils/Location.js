@@ -27,4 +27,12 @@ const getActionIconsInRadius = async (lat, lng, channel_id, type, radius = 0.05)
     return res;
 }
 
-module.exports = { getLocationInRadius, getCameraInRadius, getActionIconsInRadius };
+const getActionIconLists = async (channel_id) => {
+    const res = await sequelize.query('SELECT lat, lng, type, createdAt FROM action_icon_locations WHERE type != "camera" AND channel_id = ' + channel_id + ' AND createdAt >= DATE_SUB( NOW(), INTERVAL 360 MINUTE )', {
+    type: QueryTypes.SELECT,
+    });
+
+    return res;
+}
+
+module.exports = { getLocationInRadius, getCameraInRadius, getActionIconsInRadius, getActionIconLists };

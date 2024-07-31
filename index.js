@@ -71,7 +71,7 @@ io.on('connection', async (socket) => {
             } else {
                 findIndex = locations.findIndex(d => d.socketId == socket.id)
 
-                if(findIndex) {
+                if(findIndex > -1) {
                     locations[findIndex] = { id: tokenData.data.id, socketId: socket.id, ...location }
                 }
             }
@@ -104,7 +104,7 @@ io.on('connection', async (socket) => {
 
         if (roomUserInfo) {
           const findIndex = roomData.findIndex(d => d.roomId === roomUserInfo.roomId);
-          if(findIndex > 0) {
+          if(findIndex > -1) {
             roomData[findIndex]['callStatus'] = false;
           }
           
@@ -162,7 +162,7 @@ io.on('connection', async (socket) => {
         } else {
           //check if there are any users in room for receving call
           const usersInRoom = await io.in(roomId).fetchSockets();
-          console.log(usersInRoom.length);
+          console.log(usersInRoom.length, '--------usersInRoom.length');
 
           if(usersInRoom.length > 1) {
             callback(2); // continue call
@@ -196,12 +196,15 @@ io.on('connection', async (socket) => {
 
               if(resCaller != null) {
                 console.log('-----------joinRoom return');
-                socket.to(roomId).emit('calling', resCaller.name, location, profile_img, calllerId); //To all connected clients except the sender
+                socket.to(roomId).emit('calling', resCaller.name, location, profile_img, calllerId, roomId); //To all connected clients except the sender
 
                 // call in busy state
                 const findIndex = roomData.findIndex(d => d.roomId === roomId);
-                if(findIndex > 0) {
+                console.log(findIndex, '--------findIndex')
+                if(findIndex > -1) {
                   roomData[findIndex]['callStatus'] = true;
+
+                  console.log(roomData, '--------roomData')
                 }
               }
             }
@@ -243,7 +246,7 @@ io.on('connection', async (socket) => {
 
         // call in free state
         const findIndex = roomData.findIndex(d => d.roomId === roomId);
-        if(findIndex > 0) {
+        if(findIndex > -1) {
           roomData[findIndex]['callStatus'] = false;
         }
       });

@@ -6,7 +6,7 @@ require("winston-daily-rotate-file");
 const fileRotateTransport = new transports.DailyRotateFile({
     filename: "logs/log-%DATE%.log",
     datePattern: "YYYY-MM-DD",
-    maxFiles: "14d",
+    maxFiles: "7d",
 });
 
 const logger = createLogger({
