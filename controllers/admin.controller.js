@@ -1,10 +1,11 @@
 const { QueryTypes } = require('sequelize');
 
-const { Devices, Admin, ReportedUsers, Channels } = require("../utils/db/model");
+const { Devices, Admin, ReportedUsers, Channels, Settings } = require("../utils/db/model");
 const { errorMessage } = require("../utils/Constants");
 const { generateAccessTokenForAdmin } = require('../utils/Token');
 const logger = require("../logger");
 const { sequelize } = require('../utils/db/config');
+const validator = require("../utils/Validator");
 
 exports.adminLogin = async (req, res) => {
     try{
@@ -142,6 +143,43 @@ exports.channelStatusAction = async (req, res) => {
       await Channels.update( { status }, { where: { id } } );
   
       return res.json({ "success": true });
+    } catch(err){
+      logger.error(err?.message, {route: req?.originalUrl});
+      return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.settingsList = async (req, res) => {
+  try{
+      const list = await Settings.findAll( { attributes: ["metakey", "metavalue"] } );
+  
+      return res.json({ "success": true, list });
+    } catch(err){
+      logger.error(err?.message, {route: req?.originalUrl});
+      return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.submitSetting = async (req, res) => {
+  try{
+      const key = req.body.key;
+
+      if(key === 'callTimer') {
+        const validData = await validator.callTimerSubmit.validate(req.body);
+
+        // check in db first
+        const data = await Settings.findOne( { attributes: ["id"], where: { metakey: key } } );
+
+        if(data === null) {
+          await Settings.create({ metakey: key, metavalue: validData.val });
+        } else {
+          await Settings.update({ metavalue: validData.val }, { where: { id: data.id } });
+        }
+
+        return res.json({ "success": true });
+      } else {
+        throw new Error("Type is invalid!");
+      }
     } catch(err){
       logger.error(err?.message, {route: req?.originalUrl});
       return res.status(500).json({ success: false, error: err.message });

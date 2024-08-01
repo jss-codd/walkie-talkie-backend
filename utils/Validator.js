@@ -143,6 +143,20 @@ const iconTapAction = Yup.object({
         .required("Type is required"),
 });
 
+const submitSetting = Yup.object({
+    key: Yup.string()
+        .trim()
+        .required("Key is required")
+});
+
+const callTimerSubmit = Yup.object({
+    val: Yup.number()
+         .typeError('Value must be number.')
+         .min(10, "Must be more than 10")
+         .required("Value is required")
+});
+    
+
 const validator = {
     adminLogin,
     profileDetails,
@@ -158,7 +172,9 @@ const validator = {
     emailSubmit,
     locationSubmit,
     nameSubmit,
-    iconTapAction
+    iconTapAction,
+    submitSetting,
+    callTimerSubmit,
 };
 
 module.exports = validator;

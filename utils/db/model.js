@@ -225,9 +225,28 @@ const ActionIconLocations = sequelize.define(
   }
 );
 
+const Settings = sequelize.define(
+  'settings',
+  {
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    metakey: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    metavalue: {
+      type: DataTypes.STRING,
+      allowNull: false
+    }
+  }
+);
+
 (async () => {
     await sequelize.sync();
     // Code here
 })();
 
-module.exports = { Devices, Locations, Otp, Admin, ReportedUsers, Channels, ActionIconLocations };
+module.exports = { Devices, Locations, Otp, Admin, ReportedUsers, Channels, ActionIconLocations, Settings };

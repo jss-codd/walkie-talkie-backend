@@ -51,6 +51,7 @@ const uploadProfileImage = multer({ storage: storageProfileImage });
 
 module.exports = app => {
     const users  = require("../controllers/user.controller.js");
+    const admin  = require("../controllers/admin.controller.js");
     
     var router   = require("express").Router();
 
@@ -97,6 +98,8 @@ module.exports = app => {
     router.get("/camera-list/:id", [authJwt.authenticateToken], users.cameraList);
 
     router.get("/action-icon-list/:id", [authJwt.authenticateToken], users.actionIconList);
+
+    router.get("/settings-list", [authJwt.authenticateToken], admin.settingsList);
 
     app.use('/api/users', router);
   };

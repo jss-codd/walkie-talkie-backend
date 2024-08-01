@@ -25,5 +25,9 @@ module.exports = app => {
 
     router.put("/channel-status-action/:id", [authJwt.authenticateTokenForAdmin], admin.channelStatusAction);
 
+    router.get("/settings-list", [authJwt.authenticateTokenForAdmin], admin.settingsList);
+
+    router.post("/submit-setting", [authJwt.authenticateTokenForAdmin, validateResource(validator.submitSetting)], admin.submitSetting);
+
     app.use('/api/admin', router);
   };
