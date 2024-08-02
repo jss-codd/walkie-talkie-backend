@@ -29,5 +29,9 @@ module.exports = app => {
 
     router.post("/submit-setting", [authJwt.authenticateTokenForAdmin, validateResource(validator.submitSetting)], admin.submitSetting);
 
+    router.get("/user-count-by-status", [authJwt.authenticateTokenForAdmin], admin.userCountByStatus);
+
+    router.get("/user-signup-count-by-month", [authJwt.authenticateTokenForAdmin], admin.userSignupCountByMonth);
+
     app.use('/api/admin', router);
   };

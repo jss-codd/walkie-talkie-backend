@@ -183,7 +183,11 @@ io.on('connection', async (socket) => {
 
             // socket.join(roomId);
 
+            console.log(locations, '------locations');
+
             const findCaller = locations.filter(d => d.socketId == socket.id);
+
+            console.log(findCaller, '------findCaller');
 
             if(findCaller && findCaller.length > 0) {
               const calllerId = findCaller[0]['id'];

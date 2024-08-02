@@ -185,3 +185,29 @@ exports.submitSetting = async (req, res) => {
       return res.status(500).json({ success: false, error: err.message });
   }
 };
+
+exports.userCountByStatus = async (req, res) => {
+  try{
+      const result = await sequelize.query('SELECT SUM(CASE WHEN blocked = false THEN 1 ELSE 0 END) AS countActive, SUM(CASE WHEN blocked = true THEN 1 ELSE 0 END) AS countBlocked, COUNT(*) AS totalCount FROM devices', {
+        type: QueryTypes.SELECT,
+        });
+  
+      return res.json({ "success": true, result });
+    } catch(err){
+      logger.error(err?.message, {route: req?.originalUrl});
+      return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.userSignupCountByMonth = async (req, res) => {
+  try{
+      const result = await sequelize.query('SELECT DATE_FORMAT(createdAt, "%Y-%m") AS month, COUNT(*) AS userCount FROM devices WHERE createdAt >= DATE_FORMAT(CURDATE() - INTERVAL 6 MONTH, "%Y-%m-01") GROUP BY month ORDER BY month DESC', {
+        type: QueryTypes.SELECT,
+        });
+  
+      return res.json({ "success": true, result });
+    } catch(err){
+      logger.error(err?.message, {route: req?.originalUrl});
+      return res.status(500).json({ success: false, error: err.message });
+  }
+};
