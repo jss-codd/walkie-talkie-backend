@@ -12,25 +12,77 @@ const getLocationInRadius = async (lat, lng, user_id, radius = 20000) => {
 }
 
 const getCameraInRadius = async (lat, lng, channel_id, radius = 0.05) => {
-    const res = await sequelize.query('SELECT id, (6371 * acos( cos( radians('+lat+') ) * cos( radians(lat) ) * cos( radians(lng) - radians('+lng+')) + sin(radians('+lat+')) * sin(radians(lat)) )) as distance FROM action_icon_locations WHERE type = "camera" AND channel_id = ' + channel_id + ' HAVING distance <= ' + radius, {
-    type: QueryTypes.SELECT,
-    });
+    // const res = await sequelize.query('SELECT id, (6371 * acos( cos( radians('+lat+') ) * cos( radians(lat) ) * cos( radians(lng) - radians('+lng+')) + sin(radians('+lat+')) * sin(radians(lat)) )) as distance FROM action_icon_locations WHERE type = "camera" AND channel_id = ' + channel_id + ' HAVING distance <= ' + radius, {
+    // type: QueryTypes.SELECT,
+    // });
+
+    const res = await sequelize.query(
+        `SELECT id, distance FROM (
+           SELECT id, 
+                  (6371 * acos(
+                    cos(radians(:lat)) * cos(radians(lat)) * cos(radians(lng) - radians(:lng)) + 
+                    sin(radians(:lat)) * sin(radians(lat))
+                  )) as distance 
+           FROM action_icon_locations 
+           WHERE type = :type 
+             AND channel_id = :channel_id 
+             AND created_at >= NOW() - INTERVAL '360 minutes'
+        ) AS subquery
+        WHERE distance <= :radius`, 
+        {
+          replacements: { lat, lng, type: "camera", channel_id, radius },
+          type: QueryTypes.SELECT,
+        }
+    );
 
     return res;
 }
 
 const getActionIconsInRadius = async (lat, lng, channel_id, type, radius = 0.05) => {
-    const res = await sequelize.query('SELECT id, (6371 * acos( cos( radians('+lat+') ) * cos( radians(lat) ) * cos( radians(lng) - radians('+lng+')) + sin(radians('+lat+')) * sin(radians(lat)) )) as distance FROM action_icon_locations WHERE type = "'+ type +'" AND channel_id = ' + channel_id + ' AND createdAt >= DATE_SUB( NOW(), INTERVAL 360 MINUTE ) HAVING distance <= ' + radius, {
-    type: QueryTypes.SELECT,
-    });
+    // const res = await sequelize.query('SELECT id, (6371 * acos( cos( radians('+lat+') ) * cos( radians(lat) ) * cos( radians(lng) - radians('+lng+')) + sin(radians('+lat+')) * sin(radians(lat)) )) as distance FROM action_icon_locations WHERE type = "'+ type +'" AND channel_id = ' + channel_id + ' AND createdAt >= DATE_SUB( NOW(), INTERVAL 360 MINUTE ) HAVING distance <= ' + radius, {
+    // type: QueryTypes.SELECT,
+    // });
+
+    // lat = +lat || 0;
+    // lng = +lng || 0;
+
+    const res = await sequelize.query(
+        `SELECT id, distance FROM (
+           SELECT id, 
+                  (6371 * acos(
+                    cos(radians(:lat)) * cos(radians(lat)) * cos(radians(lng) - radians(:lng)) + 
+                    sin(radians(:lat)) * sin(radians(lat))
+                  )) as distance 
+           FROM action_icon_locations 
+           WHERE type = :type 
+             AND channel_id = :channel_id 
+             AND created_at >= NOW() - INTERVAL '360 minutes'
+        ) AS subquery
+        WHERE distance <= :radius`, 
+        {
+          replacements: { lat, lng, type, channel_id, radius },
+          type: QueryTypes.SELECT,
+        }
+    );      
 
     return res;
 }
 
 const getActionIconLists = async (channel_id) => {
-    const res = await sequelize.query('SELECT lat, lng, type, createdAt FROM action_icon_locations WHERE type != "camera" AND channel_id = ' + channel_id + ' AND createdAt >= DATE_SUB( NOW(), INTERVAL 360 MINUTE )', {
-    type: QueryTypes.SELECT,
-    });
+    // const res = await sequelize.query('SELECT lat, lng, type, created_at AS createdAt FROM action_icon_locations WHERE type != "camera" AND channel_id = ' + channel_id + ' AND created_at >= DATE_SUB( NOW(), INTERVAL 360 MINUTE )', {
+    // type: QueryTypes.SELECT,
+    // });
+
+    const res = await sequelize.query(
+        `SELECT lat, lng, type, created_at AS createdAt FROM action_icon_locations 
+         WHERE type != :type
+         AND channel_id = :channel_id
+         AND created_at >= NOW() - INTERVAL '360 minutes'`, 
+        {
+          replacements: { type: "camera", channel_id },
+          type: QueryTypes.SELECT,
+        }
+    );
 
     return res;
 }

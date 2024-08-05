@@ -158,7 +158,7 @@ const ReportedUsers = sequelize.define(
     },
     admin_action: {
       type: DataTypes.INTEGER,
-      defaultValue: false
+      defaultValue: 0
     }
   }
 );
@@ -207,11 +207,11 @@ const ActionIconLocations = sequelize.define(
       allowNull: false,
     },
     lat: {
-      type: DataTypes.STRING,
+      type: DataTypes.FLOAT,
       allowNull: false,
     },
     lng: {
-      type: DataTypes.STRING,
+      type: DataTypes.FLOAT,
       allowNull: false,
     },
     channel_id:{

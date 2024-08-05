@@ -67,6 +67,7 @@ exports.pinLogin = async (req, res) => {
     }
 };
 
+// not using
 exports.upload = async (req, res, next) => {
     try{
         const file = req.file;
@@ -140,6 +141,7 @@ exports.upload = async (req, res, next) => {
     }
 };
 
+// not using
 exports.deviceToken = async (req, res) => {
     try{
         const token = req.body.token;
@@ -160,6 +162,7 @@ exports.deviceToken = async (req, res) => {
     }
 };
 
+// not using
 exports.saveLocation = async (req, res) => {
     try{
         const latitude = req.body.latitude;
@@ -175,6 +178,7 @@ exports.saveLocation = async (req, res) => {
     }
 };
 
+// not using
 exports.audioPlayStatus = async (req, res) => {
     try{
         const status = req.body.status;
@@ -195,6 +199,7 @@ exports.audioPlayStatus = async (req, res) => {
     }
 };
 
+// not using
 exports.notificationStatus = async (req, res) => {
     try{
         const status = req.body.status;
@@ -215,6 +220,7 @@ exports.notificationStatus = async (req, res) => {
     }
 };
 
+// not using
 exports.fetchSettings = async (req, res) => {
     try{
         let status = true;
@@ -232,6 +238,7 @@ exports.fetchSettings = async (req, res) => {
     }
 };
 
+// not using
 exports.fetchNearDevices = async (req, res) => {
     try{
         const location = JSON.parse(req.body?.location) || {};
@@ -278,9 +285,21 @@ exports.mobileVerification = async (req, res) => {
             }
     
             //check if there are already 3 unused otp request then it will block the action
-            const otpRes = await sequelize.query('SELECT id FROM `device_otps` WHERE createdAt >= DATE_SUB( NOW(), INTERVAL 10 MINUTE ) AND status = false AND device_id = '+resDevice.id + ' LIMIT 2', {
-              type: QueryTypes.SELECT,
-            });
+            // const otpRes = await sequelize.query('SELECT id FROM `device_otps` WHERE created_at >= DATE_SUB( NOW(), INTERVAL 10 MINUTE ) AND status = false AND device_id = '+resDevice.id + ' LIMIT 2', {
+            //   type: QueryTypes.SELECT,
+            // });
+
+            const otpRes = await sequelize.query(
+              `SELECT id FROM device_otps 
+               WHERE created_at >= NOW() - INTERVAL '10 minutes' 
+               AND otp = :otp 
+               AND status = false
+               AND device_id = :device_id LIMIT 2`,
+              {
+                replacements: { otp, device_id: resDevice.id },
+                type: QueryTypes.SELECT,
+              }
+            );
     
             if(otpRes.length >= 2) {
               return res.status(400).json({ success: false, error: errorMessage.otpSentExceeded });
@@ -325,9 +344,21 @@ exports.otpVerification = async (req, res) => {
           return res.status(400).json({ success: false, error: errorMessage.blockedAccount });
         }
           
-        const otpRes = await sequelize.query('SELECT id FROM `device_otps` WHERE createdAt >= DATE_SUB( NOW(), INTERVAL 10 MINUTE ) AND otp = '+otp+' AND status = false AND device_id = '+resDevice.id, {
-          type: QueryTypes.SELECT,
-        });
+        // const otpRes = await sequelize.query('SELECT id FROM device_otps WHERE created_at >= DATE_SUB( NOW(), INTERVAL 10 MINUTE ) AND otp = '+otp+' AND status = false AND device_id = '+resDevice.id, {
+        //   type: QueryTypes.SELECT,
+        // });
+
+        const otpRes = await sequelize.query(
+          `SELECT id FROM device_otps 
+           WHERE created_at >= NOW() - INTERVAL '10 minutes' 
+           AND otp = :otp 
+           AND status = false 
+           AND device_id = :device_id`, 
+          {
+            replacements: { otp, device_id: resDevice.id },
+            type: QueryTypes.SELECT,
+          }
+        );
         
         // [ { id: 18 } ] => otpRes
     

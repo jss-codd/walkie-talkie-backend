@@ -12,7 +12,7 @@ exports.adminLogin = async (req, res) => {
         const email = req.body.email;
         const password = req.body.password;
     
-        const details = await Admin.findOne({ where: { email, password, status: 1 } });
+        const details = await Admin.findOne({ where: { email, password, status: true } });
     
         if(details === null) {
           return res.status(404).json({ success: false, error: errorMessage.account404 });
@@ -54,7 +54,11 @@ exports.reportedUserList = async (req, res) => {
         const page = +req?.query?.page || 1;
         const offset = (page - 1) * limit;
     
-        const list = await sequelize.query('SELECT id, mobile, name, email, location, profile_img, blocked,(SELECT count(t1.id) FROM reported_users t1 WHERE t1.admin_action = 0 AND reported_id = devices.id GROUP BY t1.reported_id) total FROM devices WHERE id IN (SELECT reported_id FROM reported_users WHERE admin_action = 0 GROUP BY reported_id) LIMIT '+ offset + ', ' + limit +'', {
+        // const list = await sequelize.query('SELECT id, mobile, name, email, location, profile_img, blocked,(SELECT count(t1.id) FROM reported_users t1 WHERE t1.admin_action = 0 AND reported_id = devices.id GROUP BY t1.reported_id) total FROM devices WHERE id IN (SELECT reported_id FROM reported_users WHERE admin_action = 0 GROUP BY reported_id) LIMIT '+ offset + ', ' + limit +'', {
+        //   type: QueryTypes.SELECT,
+        // });
+
+        const list = await sequelize.query(`SELECT id, mobile, name, email, location, profile_img, blocked,(SELECT count(t1.id) FROM reported_users t1 WHERE t1.admin_action = 0 AND reported_id = devices.id GROUP BY t1.reported_id) total FROM devices WHERE id IN (SELECT reported_id FROM reported_users WHERE admin_action = 0 GROUP BY reported_id) LIMIT ${limit} OFFSET ${offset}` , {
           type: QueryTypes.SELECT,
         });
     
@@ -188,7 +192,7 @@ exports.submitSetting = async (req, res) => {
 
 exports.userCountByStatus = async (req, res) => {
   try{
-      const result = await sequelize.query('SELECT SUM(CASE WHEN blocked = false THEN 1 ELSE 0 END) AS countActive, SUM(CASE WHEN blocked = true THEN 1 ELSE 0 END) AS countBlocked, COUNT(*) AS totalCount FROM devices', {
+      const result = await sequelize.query('SELECT SUM(CASE WHEN blocked = false THEN 1 ELSE 0 END) AS countactive, SUM(CASE WHEN blocked = true THEN 1 ELSE 0 END) AS countblocked, COUNT(*) AS totalcount FROM devices', {
         type: QueryTypes.SELECT,
         });
   
@@ -201,9 +205,20 @@ exports.userCountByStatus = async (req, res) => {
 
 exports.userSignupCountByMonth = async (req, res) => {
   try{
-      const result = await sequelize.query('SELECT DATE_FORMAT(createdAt, "%Y-%m") AS month, COUNT(*) AS userCount FROM devices WHERE createdAt >= DATE_FORMAT(CURDATE() - INTERVAL 6 MONTH, "%Y-%m-01") GROUP BY month ORDER BY month DESC', {
-        type: QueryTypes.SELECT,
-        });
+      // const result = await sequelize.query('SELECT DATE_FORMAT(created_at, "%Y-%m") AS month, COUNT(*) AS userCount FROM devices WHERE created_at >= DATE_FORMAT(CURDATE() - INTERVAL 6 MONTH, "%Y-%m-01") GROUP BY month ORDER BY month DESC', {
+      //   type: QueryTypes.SELECT,
+      //   });
+
+      const result = await sequelize.query(`
+          SELECT TO_CHAR(created_at, 'YYYY-MM') AS month, COUNT(*) AS userCount
+          FROM devices
+          WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '6 months')
+          GROUP BY month
+          ORDER BY month DESC`, 
+         {
+           type: QueryTypes.SELECT,
+         });
+      
   
       return res.json({ "success": true, result });
     } catch(err){
