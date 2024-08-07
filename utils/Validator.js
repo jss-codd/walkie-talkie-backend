@@ -75,12 +75,14 @@ const otpVerification = Yup.object({
     mobile: Yup.string()
         .trim()
         .required("Mobile is required"),
-    otp: Yup.number()
+    otp: Yup.string()
+        .trim()
         .required("OTP is required")
 });
 
 const pinSet = Yup.object({
-    pin: Yup.number()
+    pin: Yup.string()
+        .trim()
         .required("PIN is required")
 });
 
@@ -88,7 +90,8 @@ const pinLogin = Yup.object({
     mobile: Yup.string()
         .trim()
         .required("Mobile is required"),
-    pin: Yup.number()
+    pin: Yup.string()
+        .trim()
         .required("PIN is required")
 });
 

@@ -26,10 +26,9 @@ exports.pinLogin = async (req, res) => {
     
         const mobile = req.body.mobile;
         let pin = req.body.pin;
-        pin = +pin || 0;
     
         if (pinCheck.test(pin) == false) {
-        return res.status(400).json({ success: false, error: errorMessage.invalidOTP });
+        return res.status(400).json({ success: false, error: errorMessage.invalidPIN });
         }
     
         const resDevice = await Devices.findOne({ where: { mobile: mobile } });
@@ -363,7 +362,7 @@ exports.otpVerification = async (req, res) => {
         // [ { id: 18 } ] => otpRes
     
         if(otpRes.length === 0) {
-          return res.status(400).json({ success: false, error: "Invalid OTP!" });
+          return res.status(400).json({ success: false, error: errorMessage.invalidOTP });
         }
     
         // update otp table
@@ -387,7 +386,7 @@ exports.pinSet = async (req, res) => {
         const pin = req.body.pin;
     
         if (pinCheck.test(pin) == false) {
-          return res.status(400).json({ success: false, error: errorMessage.invalidOTP });
+          return res.status(400).json({ success: false, error: errorMessage.invalidPIN });
         }
     
         // update pin in table

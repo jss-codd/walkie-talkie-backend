@@ -11,7 +11,7 @@ const Devices = sequelize.define(
         primaryKey: true,
     },
     mobile_pin: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.STRING,
       allowNull: true,
   },
     mobile: {
