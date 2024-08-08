@@ -158,6 +158,13 @@ const callTimerSubmit = Yup.object({
          .min(10, "Must be more than 10")
          .required("Value is required")
 });
+
+const actionMarkersDistanceSubmit = Yup.object({
+    val: Yup.number()
+         .typeError('Value must be number.')
+         .min(10, "Must be more than 10")
+         .required("Value is required")
+});
     
 
 const validator = {
@@ -178,6 +185,7 @@ const validator = {
     iconTapAction,
     submitSetting,
     callTimerSubmit,
+    actionMarkersDistanceSubmit
 };
 
 module.exports = validator;

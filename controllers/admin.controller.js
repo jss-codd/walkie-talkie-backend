@@ -168,8 +168,14 @@ exports.submitSetting = async (req, res) => {
   try{
       const key = req.body.key;
 
-      if(key === 'callTimer') {
-        const validData = await validator.callTimerSubmit.validate(req.body);
+      if(key === 'callTimer' || key === 'actionMarkersDistance') {
+        let validData = {};
+
+        if(key === 'callTimer') {
+          validData = await validator.callTimerSubmit.validate(req.body);
+        } else if (key === 'actionMarkersDistance') {
+          validData = await validator.actionMarkersDistanceSubmit.validate(req.body);
+        }
 
         // check in db first
         const data = await Settings.findOne( { attributes: ["id"], where: { metakey: key } } );
