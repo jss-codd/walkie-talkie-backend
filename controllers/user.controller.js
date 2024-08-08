@@ -38,7 +38,7 @@ exports.pinLogin = async (req, res) => {
         }
     
         if(resDevice.pin_retry_count >= pinRetryCount) {
-        return res.status(400).json({ success: false, error: errorMessage.otpRetryExceeded, pin_retry_count: resDevice.pin_retry_count });
+        return res.status(400).json({ success: false, error: errorMessage.pinRetryExceeded, pin_retry_count: resDevice.pin_retry_count });
         }
     
         if(resDevice.mobile_pin !== pin) {
