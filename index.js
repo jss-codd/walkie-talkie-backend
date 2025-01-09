@@ -183,8 +183,6 @@ io.on('connection', async (socket) => {
 
             // socket.join(roomId);
 
-            console.log(locations, '------locations');
-
             const findCaller = locations.filter(d => d.socketId == socket.id);
 
             console.log(findCaller, '------findCaller');
@@ -207,8 +205,6 @@ io.on('connection', async (socket) => {
                 console.log(findIndex, '--------findIndex')
                 if(findIndex > -1) {
                   roomData[findIndex]['callStatus'] = true;
-
-                  console.log(roomData, '--------roomData')
                 }
               }
             }

@@ -81,7 +81,7 @@ exports.blockUserAction = async (req, res) => {
           return res.status(400).json({ success: false, error: "Invalid action!" });
         }
     
-        await ReportedUsers.update( { admin_action: true }, { where: { reported_id: id, admin_action: false } } );
+        await ReportedUsers.update( { admin_action: 1 }, { where: { reported_id: id, admin_action: 0 } } );
     
         await Devices.update( { blocked: true }, { where: { id } } );
     
@@ -199,7 +199,7 @@ exports.submitSetting = async (req, res) => {
 exports.userCountByStatus = async (req, res) => {
   try{
       const result = await sequelize.query('SELECT SUM(CASE WHEN blocked = false THEN 1 ELSE 0 END) AS countactive, SUM(CASE WHEN blocked = true THEN 1 ELSE 0 END) AS countblocked, COUNT(*) AS totalcount FROM devices', {
-        type: QueryTypes.SELECT,
+        type: QueryTypes.SELECT
         });
   
       return res.json({ "success": true, result });

@@ -81,7 +81,7 @@ module.exports = app => {
 
     router.post("/profile-details", [authJwt.authenticateToken, validateResource(validator.profileDetails)], users.profileDetailsPost);
 
-    router.post("/profile-upload", [authJwt.authenticateToken, authJwt.verifyAccount, authJwt.verifyAccount, uploadProfileImage.single("photo")], users.profileUpload);
+    router.post("/profile-upload", [authJwt.authenticateToken, authJwt.verifyAccount, uploadProfileImage.single("photo")], users.profileUpload);
 
     router.post("/report-user/:id", [authJwt.authenticateToken], users.reportUser);
 
